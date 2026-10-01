@@ -1,29 +1,20 @@
 ; Stage 2: entered from the boot sector with CS = DS = ES = SS = 0.
 
 main:
+    call make_sin_table
     call video_init
-
-    ; Test pattern: color = x + y, so every palette entry shows up as a stripe.
-    push es
-    mov ax, BACK_SEG
-    mov es, ax
-    xor di, di
-    xor dx, dx                  ; y
-.row:
-    xor cx, cx                  ; x
-.col:
-    mov al, cl
-    add al, dl
-    stosb
-    inc cx
-    cmp cx, SCREEN_W
-    jb .col
-    inc dx
-    cmp dx, SCREEN_H
-    jb .row
-    pop es
-
+.frame:
+    call handle_input
+    call render
     call present
-    jmp halt
+    jmp .frame
+
+player_x:     dd (2 << 16) + 0x8000     ; 2.5 tiles
+player_y:     dd (2 << 16) + 0x8000
+player_angle: dw 0                      ; facing +x
 
 %include "video.asm"
+%include "math.asm"
+%include "map.asm"
+%include "raycast.asm"
+%include "input.asm"
