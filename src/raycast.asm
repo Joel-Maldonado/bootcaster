@@ -12,6 +12,9 @@ render:
     mov ax, BACK_SEG
     mov es, ax
     mov word [col], 0
+%ifdef STATS
+    mov dword [stat_steps], 0
+%endif
 .column:
     ; Spread the field of view evenly across the columns.
     mov ax, [col]
@@ -32,6 +35,7 @@ render:
     mov edi, [player_y]
     xor ecx, ecx                ; distance travelled
 .march:
+    STAT_INC stat_steps
     add esi, [ray_dx]
     add edi, [ray_dy]
     add ecx, RAY_STEP

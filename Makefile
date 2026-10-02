@@ -1,8 +1,9 @@
 NASM ?= nasm
 QEMU ?= qemu-system-i386
+NASMFLAGS := -f bin -I src/ $(if $(STATS),-DSTATS)
 
 bootcaster.img: $(wildcard src/*.asm)
-	$(NASM) -f bin -I src/ -o $@ src/boot.asm
+	$(NASM) $(NASMFLAGS) -o $@ src/boot.asm
 
 run: bootcaster.img
 	$(QEMU) -drive format=raw,file=$<
