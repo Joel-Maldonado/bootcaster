@@ -1,9 +1,14 @@
-; First attempt: for each screen column, walk a ray forward in small fixed
-; steps until it lands inside a wall, and size the wall by how far it went.
+; One ray per screen column, cast with DDA: instead of creeping forward in
+; small steps, jump straight from one grid line to the next, always taking
+; whichever line (vertical or horizontal) the ray reaches first. Every step
+; lands on a tile boundary, so no wall can be skipped and none overshot.
+;
+; Rays fan out across a camera plane instead of across equal angles, and
+; wall distance is measured along the view direction. Together those keep
+; flat walls flat.
 
-FOV        equ 10923            ; 60 degrees as a binary angle
-RAY_STEP   equ 2048             ; 1/32 of a tile
-MAX_DIST   equ 24 << 16
+PLANE       equ 43254           ; 0.66 in 16.16, about a 66 degree field of view
+MIN_DIST    equ 0x100           ; don't divide by (nearly) zero up against a wall
 CEIL_COLOR  equ 0x13
 FLOOR_COLOR equ 0x17
 
@@ -11,68 +16,174 @@ render:
     push es
     mov ax, BACK_SEG
     mov es, ax
-    mov word [col], 0
 %ifdef STATS
     mov dword [stat_steps], 0
 %endif
-.column:
-    ; Spread the field of view evenly across the columns.
-    mov ax, [col]
-    sub ax, SCREEN_W / 2
-    mov cx, FOV
-    imul cx
-    mov cx, SCREEN_W
-    idiv cx
-    add ax, [player_angle]
-    mov si, ax
-    call sin_cos
-    sar eax, 5                  ; one step is 1/32 of a tile
-    sar edx, 5
-    mov [ray_dx], eax
-    mov [ray_dy], edx
 
-    mov esi, [player_x]
-    mov edi, [player_y]
-    xor ecx, ecx                ; distance travelled
-.march:
+    ; The camera for this frame: a unit direction, and a plane at right
+    ; angles to it whose half-width sets the field of view.
+    mov si, [player_angle]
+    call sin_cos                ; EAX = cos, EDX = sin
+    mov [dir_x], eax
+    mov [dir_y], edx
+    mov ebx, PLANE
+    push eax
+    mov eax, edx
+    neg eax
+    call fixmul
+    mov [plane_x], eax          ; -sin * 0.66
+    pop eax
+    call fixmul
+    mov [plane_y], eax          ; cos * 0.66
+
+    mov word [col], 0
+.column:
+    ; camera_x goes from -1 at the left edge of the screen to +1 at the right.
+    movsx eax, word [col]
+    shl eax, 1
+    sub eax, SCREEN_W
+    shl eax, 16
+    cdq
+    mov ebx, SCREEN_W
+    idiv ebx
+    mov ebx, eax
+    mov eax, [plane_x]
+    call fixmul
+    add eax, [dir_x]
+    mov [ray_x], eax
+    mov eax, [plane_y]
+    call fixmul
+    add eax, [dir_y]
+    mov [ray_y], eax
+
+    mov eax, [ray_x]
+    mov ecx, [player_x]
+    call axis_setup
+    mov [delta_x], ebx
+    mov [side_x], eax
+    mov [step_x], dx
+    mov eax, [ray_y]
+    mov ecx, [player_y]
+    call axis_setup
+    mov [delta_y], ebx
+    mov [side_y], eax
+    mov [step_y], dx
+
+    mov ax, [player_x + 2]      ; the high word of a 16.16 value is the tile
+    mov [map_x], ax
+    mov ax, [player_y + 2]
+    mov [map_y], ax
+
+.step:
     STAT_INC stat_steps
-    add esi, [ray_dx]
-    add edi, [ray_dy]
-    add ecx, RAY_STEP
-    cmp ecx, MAX_DIST
-    jae .miss
-    call map_index
+    mov eax, [side_x]
+    cmp eax, [side_y]
+    jae .step_y
+    add eax, [delta_x]
+    mov [side_x], eax
+    mov ax, [step_x]
+    add [map_x], ax
+    mov byte [side], 0
+    jmp .check
+.step_y:
+    mov eax, [side_y]
+    add eax, [delta_y]
+    mov [side_y], eax
+    mov ax, [step_y]
+    add [map_y], ax
+    mov byte [side], 1
+.check:
+    mov bx, [map_y]
+    shl bx, 4                   ; * MAP_W
+    add bx, [map_x]
     mov al, [map + bx]
     test al, al
-    jz .march
-    jmp .hit
-.miss:
-    xor al, al
-.hit:
+    jz .step
+
+    ; We just crossed into a wall tile. Back off the last step to get the
+    ; distance to the grid line we hit, and shade y-facing walls darker so
+    ; corners read.
     xor bh, bh
     mov bl, al
-    mov al, [wall_colors + bx]
+    cmp byte [side], 0
+    jne .y_side
+    mov ecx, [side_x]
+    sub ecx, [delta_x]
+    mov al, [wall_colors_x + bx]
+    jmp .have_dist
+.y_side:
+    mov ecx, [side_y]
+    sub ecx, [delta_y]
+    mov al, [wall_colors_y + bx]
+.have_dist:
     mov [wall_color], al
-
-    ; Wall height is inversely proportional to distance.
+    cmp ecx, MIN_DIST
+    jae .dist_ok
+    mov ecx, MIN_DIST
+.dist_ok:
     mov eax, SCREEN_H << 16
     xor edx, edx
-    div ecx
-    cmp eax, SCREEN_H
-    jbe .height_ok
-    mov eax, SCREEN_H
-.height_ok:
-    mov bx, SCREEN_H
-    sub bx, ax
-    shr bx, 1                   ; top of the wall
-    mov dx, bx
-    add dx, ax                  ; bottom of the wall
+    div ecx                     ; wall height in pixels
+
+    mov ebx, SCREEN_H
+    sub ebx, eax
+    sar ebx, 1                  ; top, negative if the wall overflows the screen
+    mov edx, ebx
+    add edx, eax                ; bottom
+    test ebx, ebx
+    jns .top_ok
+    xor ebx, ebx
+.top_ok:
+    cmp edx, SCREEN_H
+    jle .bottom_ok
+    mov edx, SCREEN_H
+.bottom_ok:
     call draw_column
 
     inc word [col]
     cmp word [col], SCREEN_W
     jb .column
     pop es
+    ret
+
+; Set up DDA along one axis.
+; In:  EAX = the ray's component on this axis, ECX = player position (16.16).
+; Out: EBX = delta, the distance along the ray between two grid lines,
+;      EAX = distance along the ray to the first grid line,
+;      DX  = which way to step through the map (+1 or -1).
+axis_setup:
+    push eax
+    test eax, eax
+    jns .positive
+    neg eax
+.positive:
+    cmp eax, 2                  ; ray (almost) parallel to this axis's lines
+    jb .never
+    mov ebx, eax
+    mov edx, 1
+    xor eax, eax
+    div ebx                     ; |1 / ray| in 16.16 is 2^32 / |ray|
+    cmp eax, 0x7FFFFFFF
+    jbe .have_delta
+.never:
+    mov eax, 0x7FFFFFFF
+.have_delta:
+    mov ebx, eax
+    pop eax
+    and ecx, 0xFFFF             ; how far into the current tile we are
+    test eax, eax
+    js .backward
+    neg ecx
+    add ecx, 0x10000            ; moving forward, the next line is 1 - that away
+    mov dx, 1
+    jmp .first_line
+.backward:
+    mov dx, -1
+.first_line:
+    push dx
+    mov eax, ecx
+    call fixmul
+    pop dx
     ret
 
 ; Fill column [col] of the back buffer: ceiling above BX, wall from BX to DX,
@@ -107,7 +218,22 @@ draw_column:
     ret
 
 col:         dw 0
-ray_dx:      dd 0
-ray_dy:      dd 0
+dir_x:       dd 0
+dir_y:       dd 0
+plane_x:     dd 0
+plane_y:     dd 0
+ray_x:       dd 0
+ray_y:       dd 0
+delta_x:     dd 0
+delta_y:     dd 0
+side_x:      dd 0
+side_y:      dd 0
+step_x:      dw 0
+step_y:      dw 0
+map_x:       dw 0
+map_y:       dw 0
+side:        db 0
 wall_color:  db 0
-wall_colors: db 0, 4, 2, 1, 14   ; default VGA palette: red, green, blue, yellow
+; Default VGA palette: x-facing walls bright, y-facing walls dark.
+wall_colors_x: db 0, 12, 10, 9, 14
+wall_colors_y: db 0, 4, 2, 1, 6
