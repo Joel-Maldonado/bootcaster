@@ -3,6 +3,7 @@
 main:
     call make_sin_table
     call video_init
+    call keyboard_init
 .frame:
     call handle_input
     call render
