@@ -14,9 +14,9 @@ KEY_LEFT  equ 0x4B
 KEY_RIGHT equ 0x4D
 KEY_DOWN  equ 0x50
 
-TURN_SPEED equ 256              ; binary angle per frame, about 1.4 degrees
-MOVE_SPEED equ 0x0800           ; 1/32 of a tile per frame
-RADIUS     equ 0x4000           ; stay a quarter tile away from walls
+TURN_PER_MS equ 25              ; binary angle per millisecond, about 137 degrees a second
+MOVE_PER_MS equ 197             ; 16.16 tiles per millisecond, 3 tiles a second
+RADIUS      equ 0x4000          ; stay a quarter tile away from walls
 
 keyboard_init:
     cli
@@ -51,34 +51,38 @@ handle_input:
     cmp byte [keys + KEY_ESC], 0
     jne reboot
 
+    mov ax, [frame_ms]
+    imul ax, TURN_PER_MS
     cmp byte [keys + KEY_LEFT], 0
     je .not_left
-    sub word [player_angle], TURN_SPEED
+    sub [player_angle], ax
 .not_left:
     cmp byte [keys + KEY_RIGHT], 0
     je .not_right
-    add word [player_angle], TURN_SPEED
+    add [player_angle], ax
 .not_right:
 
-    xor ebx, ebx                ; forward speed
-    xor ecx, ecx                ; sideways speed
+    movzx edx, word [frame_ms]
+    imul edx, MOVE_PER_MS       ; how far to go this frame
+    xor ebx, ebx                ; forward
+    xor ecx, ecx                ; sideways
     mov al, [keys + KEY_W]
     or al, [keys + KEY_UP]
     jz .not_forward
-    add ebx, MOVE_SPEED
+    add ebx, edx
 .not_forward:
     mov al, [keys + KEY_S]
     or al, [keys + KEY_DOWN]
     jz .not_back
-    sub ebx, MOVE_SPEED
+    sub ebx, edx
 .not_back:
     cmp byte [keys + KEY_D], 0
     je .not_right_strafe
-    add ecx, MOVE_SPEED
+    add ecx, edx
 .not_right_strafe:
     cmp byte [keys + KEY_A], 0
     je .not_left_strafe
-    sub ecx, MOVE_SPEED
+    sub ecx, edx
 .not_left_strafe:
 
     ; Walk along the view direction (cos, sin) and strafe along the
