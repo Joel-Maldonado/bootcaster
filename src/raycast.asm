@@ -9,13 +9,15 @@
 
 PLANE       equ 43254           ; 0.66 in 16.16, about a 66 degree field of view
 MIN_DIST    equ 0x100           ; don't divide by (nearly) zero up against a wall
-CEIL_COLOR  equ 0x13
-FLOOR_COLOR equ 0x17
+CEIL_COLOR  equ SHADOW | (RAMP_STONE + 7)
+FLOOR_COLOR equ SHADOW | (RAMP_WOOD + 9)
 
 render:
     push es
     mov ax, BACK_SEG
     mov es, ax
+    mov ax, TEX_SEG
+    mov fs, ax
 %ifdef STATS
     mov dword [stat_steps], 0
 %endif
@@ -101,39 +103,73 @@ render:
     jz .step
 
     ; We just crossed into a wall tile. Back off the last step to get the
-    ; distance to the grid line we hit, and shade y-facing walls darker so
-    ; corners read.
-    xor bh, bh
-    mov bl, al
+    ; distance to the grid line we hit, then find where along that wall the
+    ; ray landed: that's the texture column. Y-facing walls use the shadowed
+    ; half of the palette so corners read.
+    dec al
+    movzx bx, al
+    shl bx, 12                  ; texture = wall type - 1, 4 KB each
+    mov [tex_base], bx
     cmp byte [side], 0
     jne .y_side
     mov ecx, [side_x]
     sub ecx, [delta_x]
-    mov al, [wall_colors_x + bx]
-    jmp .have_dist
+    mov byte [shade], 0
+    mov eax, [ray_y]
+    mov ebx, ecx
+    call fixmul
+    add eax, [player_y]
+    cmp dword [ray_x], 0
+    jg .mirror
+    jmp .have_hit
 .y_side:
     mov ecx, [side_y]
     sub ecx, [delta_y]
-    mov al, [wall_colors_y + bx]
-.have_dist:
-    mov [wall_color], al
+    mov byte [shade], SHADOW
+    mov eax, [ray_x]
+    mov ebx, ecx
+    call fixmul
+    add eax, [player_x]
+    cmp dword [ray_y], 0
+    jl .mirror
+    jmp .have_hit
+.mirror:
+    not eax                     ; so textures aren't flipped on two of the four faces
+.have_hit:
+    shr ax, 10                  ; top 6 bits of the fraction: column 0-63
+    add [tex_base], ax
+
     cmp ecx, MIN_DIST
     jae .dist_ok
     mov ecx, MIN_DIST
 .dist_ok:
     mov eax, SCREEN_H << 16
     xor edx, edx
-    div ecx                     ; wall height in pixels
+    div ecx
+    mov ecx, eax                ; wall height in pixels
+    test ecx, ecx
+    jnz .has_height
+    inc ecx
+.has_height:
+    mov eax, TEX_SIZE << 16
+    xor edx, edx
+    div ecx
+    mov [tex_step], eax         ; texels per screen pixel, 16.16
 
     mov ebx, SCREEN_H
-    sub ebx, eax
+    sub ebx, ecx
     sar ebx, 1                  ; top, negative if the wall overflows the screen
     mov edx, ebx
-    add edx, eax                ; bottom
+    add edx, ecx                ; bottom
+    xor eax, eax
     test ebx, ebx
     jns .top_ok
+    mov eax, ebx                ; skip the texels above the screen
+    neg eax
+    imul eax, [tex_step]
     xor ebx, ebx
 .top_ok:
+    mov [tex_pos], eax
     cmp edx, SCREEN_H
     jle .bottom_ok
     mov edx, SCREEN_H
@@ -186,34 +222,43 @@ axis_setup:
     pop dx
     ret
 
-; Fill column [col] of the back buffer: ceiling above BX, wall from BX to DX,
-; floor below. ES must point at the back buffer.
+; Fill column [col] of the back buffer: ceiling above BX, textured wall from
+; BX to DX, floor below. ES must point at the back buffer, FS at the textures.
 draw_column:
     mov di, [col]
-    xor cx, cx
+    mov cx, bx
+    jcxz .wall
 .ceiling:
-    cmp cx, bx
-    jae .wall
     mov byte [es:di], CEIL_COLOR
     add di, SCREEN_W
-    inc cx
-    jmp .ceiling
+    loop .ceiling
 .wall:
-    mov al, [wall_color]
-.wall_loop:
-    cmp cx, dx
-    jae .floor
+    mov cx, dx
+    sub cx, bx
+    jcxz .floor
+    mov ebp, [tex_pos]
+    mov si, [tex_base]
+    mov ah, [shade]
+.texel:
+    mov ebx, ebp
+    shr ebx, 16
+    and bx, TEX_SIZE - 1        ; texture row
+    shl bx, 6
+    add bx, si
+    mov al, [fs:bx]
+    or al, ah
     mov [es:di], al
     add di, SCREEN_W
-    inc cx
-    jmp .wall_loop
+    add ebp, [tex_step]
+    loop .texel
 .floor:
-    cmp cx, SCREEN_H
-    jae .done
+    mov cx, SCREEN_H
+    sub cx, dx
+    jcxz .done
+.floor_loop:
     mov byte [es:di], FLOOR_COLOR
     add di, SCREEN_W
-    inc cx
-    jmp .floor
+    loop .floor_loop
 .done:
     ret
 
@@ -233,7 +278,7 @@ step_y:      dw 0
 map_x:       dw 0
 map_y:       dw 0
 side:        db 0
-wall_color:  db 0
-; Default VGA palette: x-facing walls bright, y-facing walls dark.
-wall_colors_x: db 0, 12, 10, 9, 14
-wall_colors_y: db 0, 4, 2, 1, 6
+shade:       db 0               ; 0, or SHADOW for y-facing walls
+tex_base:    dw 0               ; texture start + column
+tex_step:    dd 0
+tex_pos:     dd 0

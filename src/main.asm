@@ -5,6 +5,8 @@ MAX_FRAME_MS equ 50             ; after a stall, don't teleport
 main:
     call make_sin_table
     call video_init
+    call palette_init
+    call make_textures
     call keyboard_init
     call timer_init
 .frame:
@@ -59,6 +61,8 @@ msg_steps:  db "ray steps per frame: ", 0
 %include "video.asm"
 %include "math.asm"
 %include "map.asm"
+%include "palette.asm"
+%include "textures.asm"
 %include "raycast.asm"
 %include "input.asm"
 %include "timer.asm"
