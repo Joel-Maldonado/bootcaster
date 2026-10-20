@@ -1,10 +1,10 @@
-; Our own 256 colors, written straight to the VGA DAC: send the first index
-; to port 0x3C8, then red, green, blue for each color to port 0x3C9 (six
-; bits each, 0-63; the index advances by itself).
+; My own 256 colors, written straight to the VGA DAC. You send the first index
+; to port 0x3C8, then red, green and blue for each color to port 0x3C9. Each
+; one is 6 bits (0-63) and the index goes up by itself.
 ;
-; Colors 0-127 are four ramps of 32 shades, one per wall material.
-; Colors 128-255 repeat them at half brightness, so setting bit 7 of any
-; texel gives the shadowed version of the same color.
+; Colors 0-127 are four ramps of 32 shades, one per wall material, and 128-255
+; are the same ramps at half brightness. So setting bit 7 on any texel gives
+; you the shadowed version of that color, basically for free.
 
 PAL_BUF equ 0x2000              ; 128 * 3 bytes of scratch, under the stack
 
@@ -62,7 +62,7 @@ palette_init:
     loop .dark
     ret
 
-; Darkest and brightest RGB of each ramp, 0-63 per channel.
+; Darkest and brightest RGB for each ramp (0-63)
 ramps:
     db  6,  1,  1,   60, 26, 16     ; brick
     db  5,  5,  6,   54, 54, 56     ; stone

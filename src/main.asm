@@ -1,6 +1,6 @@
-; Stage 2: entered from the boot sector with CS = DS = ES = SS = 0.
+; Stage 2. We get here from the boot sector with CS = DS = ES = SS = 0.
 
-MAX_FRAME_MS equ 50             ; after a stall, don't teleport
+MAX_FRAME_MS equ 50             ; so a long stall doesn't teleport you
 
 main:
     call make_sin_table
@@ -10,8 +10,8 @@ main:
     call keyboard_init
     call timer_init
 .frame:
-    ; Milliseconds since the last frame, so movement doesn't depend on
-    ; how fast this machine draws.
+    ; ms since the last frame, so you move at the same speed no matter how
+    ; fast the machine draws
     mov eax, [ticks]
     mov edx, eax
     sub eax, [last_tick]
@@ -52,7 +52,7 @@ frame_ms:     dw 0
 %ifdef STATS
 frames:     dd 0
 stat_since: dd 0
-stat_steps: dd 0                        ; ray steps in the last frame
+stat_steps: dd 0                        ; ray steps last frame
 msg_fps:    db "frames in the last second: ", 0
 msg_steps:  db "ray steps per frame: ", 0
 %endif

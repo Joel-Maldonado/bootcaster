@@ -1,8 +1,8 @@
-; IRQ 0 comes from channel 0 of the 8254 timer chip, which counts down from a
-; reload value at 1.193182 MHz and interrupts each time it reaches zero. The
-; BIOS leaves the reload at 65536, about 18.2 interrupts a second, which is
-; too coarse to time a frame. We reload it for a 1 kHz tick and count
-; milliseconds ourselves. Nothing else here needs the BIOS's clock.
+; IRQ 0 comes from channel 0 of the 8254 timer chip. It counts down from a
+; reload value at 1.193182 MHz and fires every time it hits zero. The BIOS
+; leaves the reload at 65536, which is only about 18.2 ticks a second, way too
+; slow to time frames with. So I reload it for 1 kHz and count milliseconds
+; myself. Nothing else in here needs the BIOS clock anyway.
 
 PIT_HZ  equ 1193182
 TICK_HZ equ 1000
@@ -15,7 +15,7 @@ timer_init:
     out 0x40, al
     mov al, ah
     out 0x40, al
-    mov word [8 * 4], timer_irq ; IRQ 0 is interrupt vector 8
+    mov word [8 * 4], timer_irq ; IRQ 0 = interrupt vector 8
     mov word [8 * 4 + 2], 0
     sti
     ret

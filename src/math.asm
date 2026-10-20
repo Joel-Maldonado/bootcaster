@@ -1,14 +1,16 @@
-; Fixed-point math. Positions and distances are 16.16: the high 16 bits are
-; whole tiles, the low 16 bits are the fraction, so 0x00018000 is 1.5 tiles.
+; Fixed point math. Positions and distances are 16.16, so the top 16 bits are
+; whole tiles and the bottom 16 are the fraction (0x00018000 is 1.5 tiles).
 ;
-; Angles are 16-bit binary angles: 65536 is a full turn, so they wrap for free
-; when they overflow. The sine table has 1024 entries, indexed by angle >> 6.
+; Angles are 16-bit binary angles where 65536 is a full turn, so they just
+; wrap around on their own. The sine table has 1024 entries, indexed by
+; angle >> 6.
 
-SIN_TABLE  equ 0x1000           ; 1024 dwords, filled in at startup
+SIN_TABLE  equ 0x1000           ; 1024 dwords, filled in at boot
 ANGLE_BITS equ 10
 ANGLES     equ 1 << ANGLE_BITS
 
-; The only time we touch the FPU: build the sine table once at boot.
+; Only place the FPU gets used. Build the sine table once at boot and never
+; touch it again.
 make_sin_table:
     fninit
     mov di, SIN_TABLE
@@ -42,7 +44,7 @@ sin_cos:
     pop bx
     ret
 
-; EAX = EAX * EBX in 16.16. Clobbers EDX.
+; EAX = EAX * EBX in 16.16 (trashes EDX)
 fixmul:
     imul ebx
     shrd eax, edx, 16

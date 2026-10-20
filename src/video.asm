@@ -1,6 +1,6 @@
-; VGA mode 13h: 320x200, one byte per pixel, 256 colors, and the whole screen
-; is a flat 64,000-byte array at A000:0000. We draw into a back buffer in
-; ordinary RAM and copy it over once per frame.
+; VGA mode 13h. 320x200, one byte per pixel, 256 colors, and the whole screen
+; is just a flat 64,000 byte array at A000:0000. I draw into a back buffer in
+; normal RAM and copy it over once a frame.
 
 VGA_SEG    equ 0xA000
 BACK_SEG   equ 0x2000           ; back buffer at physical 0x20000
@@ -12,11 +12,11 @@ video_init:
     int 0x10
     ret
 
-; Wait for the start of vertical retrace (bit 3 of the VGA input status
-; register), so the copy below lands between frames instead of tearing.
+; Wait for vertical retrace to start (bit 3 of port 0x3DA) so the copy
+; happens between frames and doesn't tear.
 wait_vretrace:
     mov dx, 0x3DA
-.in_retrace:                    ; already inside one? let it finish first
+.in_retrace:                    ; already in one? wait for it to end first
     in al, dx
     test al, 8
     jnz .in_retrace

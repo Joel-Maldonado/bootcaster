@@ -1,10 +1,9 @@
-; Build with `make STATS=1` to print counters to port 0xE9. QEMU's
-; -debugcon option turns that port into a log file; on a real PC the
-; writes go nowhere.
+; `make STATS=1` prints a few counters to port 0xE9. QEMU's -debugcon turns
+; that port into a log, and on a real PC the writes just go nowhere.
 
 %ifdef STATS
 
-; Print the zero-terminated string at SI, then EAX in decimal and a newline.
+; Print the string at SI, then EAX in decimal, then a newline
 stat_print:
     pushad
 .label:

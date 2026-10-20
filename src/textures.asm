@@ -1,9 +1,9 @@
-; Four 64x64 wall textures, generated at boot instead of stored on disk:
-; brick, stone, tile and wood. Each texel is a palette index. Texture n
-; starts at TEX_SEG:n*4096 and is stored row by row.
+; Four 64x64 wall textures (brick, stone, tile and wood). They get generated
+; at boot so there aren't any images on the disk. Each texel is a palette
+; index, and texture n starts at TEX_SEG:n*4096, row by row.
 ;
-; The grain comes from a 16-bit Galois LFSR, the same shift register you'd
-; build out of flip-flops and XOR gates.
+; The grain comes from a 16-bit Galois LFSR, which is the same shift register
+; you'd build in hardware out of flip-flops and XOR gates.
 
 TEX_SEG  equ 0x3000             ; physical 0x30000
 TEX_SIZE equ 64
@@ -37,11 +37,11 @@ texel_makers:
     dw brick_texel, stone_texel, tile_texel, wood_texel
 texel_makers_end:
 
-; Each maker gets CX = x and DX = y, returns the palette index in AL, and may
-; change AX and BX.
+; Each of these gets CX = x and DX = y and returns a palette index in AL.
+; They're allowed to trash AX and BX.
 
-; Rows of 16-pixel bricks, every other row shifted half a brick, with
-; mortar between them and a lit top edge and shadowed bottom edge.
+; Bricks. 32x16 with mortar in between, every other row shifted half a brick,
+; and a lighter top edge and darker bottom edge on each one.
 brick_texel:
     mov bx, dx
     and bx, 15                  ; y inside this row of bricks
@@ -71,7 +71,7 @@ brick_texel:
     add al, RAMP_STONE + 9
     ret
 
-; Big 32x32 blocks with dark seams, each block a slightly different shade.
+; Stone. Big 32x32 blocks with dark seams, each one a slightly different shade.
 stone_texel:
     test dx, 31
     jz .seam
@@ -98,7 +98,8 @@ stone_texel:
     mov al, RAMP_STONE + 3
     ret
 
-; 16x16 glazed tiles: grout lines, bright top-left bevel, dark bottom-right.
+; Tile. 16x16 tiles with grout lines, bright on the top and left edges and
+; dark on the bottom and right.
 tile_texel:
     mov ax, cx
     and ax, 15
@@ -130,8 +131,8 @@ tile_texel:
     mov al, RAMP_STONE + 6
     ret
 
-; Vertical planks: a streak per column for grain, and a dark ring line that
-; sits at a different height on each plank.
+; Wood. Vertical planks with a streak per column for the grain, and a dark
+; ring line at a different height on each plank.
 wood_texel:
     test cx, 15
     jz .seam
@@ -157,7 +158,7 @@ wood_texel:
     mov al, RAMP_WOOD + 3
     ret
 
-; Advance the LFSR (taps 16, 14, 13, 11) and return its new value in AX.
+; Step the LFSR (taps 16, 14, 13, 11) and return the new value in AX
 lfsr_next:
     shr word [lfsr], 1
     jnc .no_tap
@@ -166,4 +167,4 @@ lfsr_next:
     mov ax, [lfsr]
     ret
 
-lfsr: dw 0xACE1                 ; any seed but zero
+lfsr: dw 0xACE1                 ; any seed works except 0

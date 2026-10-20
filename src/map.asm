@@ -1,5 +1,5 @@
-; The world: a 16x16 grid of tiles. 0 is empty floor, anything else is a wall
-; and picks the wall's look. The border must stay solid so rays always hit.
+; The map. 16x16 tiles, 0 is floor and anything else is a wall (the number
+; picks the texture). Keep the border solid or rays will run off the map.
 
 MAP_W equ 16
 MAP_H equ 16
@@ -22,7 +22,7 @@ map:
     db 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
     db 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
 
-; Index of the tile under a 16.16 position. In: ESI = x, EDI = y.
+; Which tile a 16.16 position is in. In: ESI = x, EDI = y.
 ; Out: BX = offset into map.
 map_index:
     push eax

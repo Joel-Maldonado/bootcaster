@@ -1,8 +1,7 @@
-; Keyboard. The BIOS (INT 16h) only hands over keystrokes: no key-up events,
-; and a held key repeats at the typematic rate after a delay, one key at a
-; time. To walk and turn at once we need to know which keys are down right
-; now, so we take over IRQ 1 and read scan codes from the keyboard
-; controller ourselves.
+; Keyboard stuff. The BIOS keyboard call (INT 16h) only gives you keystrokes.
+; There are no key-ups, and holding a key only repeats it after a delay, one
+; key at a time. That's useless if you want to walk and turn at once, so I
+; take over IRQ 1 and read the scan codes off the keyboard controller myself.
 
 KEY_ESC   equ 0x01
 KEY_W     equ 0x11
@@ -14,20 +13,20 @@ KEY_LEFT  equ 0x4B
 KEY_RIGHT equ 0x4D
 KEY_DOWN  equ 0x50
 
-TURN_PER_MS equ 25              ; binary angle per millisecond, about 137 degrees a second
-MOVE_PER_MS equ 197             ; 16.16 tiles per millisecond, 3 tiles a second
-RADIUS      equ 0x4000          ; stay a quarter tile away from walls
+TURN_PER_MS equ 25              ; binary angle per ms, ~137 degrees a sec
+MOVE_PER_MS equ 197             ; 16.16 tiles per ms, so 3 tiles a sec
+RADIUS      equ 0x4000          ; keep a quarter tile away from walls
 
 keyboard_init:
     cli
-    mov word [9 * 4], keyboard_irq      ; IRQ 1 is interrupt vector 9
+    mov word [9 * 4], keyboard_irq      ; IRQ 1 = interrupt vector 9
     mov word [9 * 4 + 2], 0
     sti
     ret
 
-; Each key sends its scan code when pressed and the same code with bit 7 set
-; when released. Arrow keys send an 0xE0 prefix first, which we skip: the
-; byte after it matches the keypad key in the same spot.
+; Every key sends its scan code when you press it, and the same code with
+; bit 7 set when you let go. Arrow keys send an 0xE0 first, which I just skip,
+; since the byte after it is the same as the keypad key in that spot anyway.
 keyboard_irq:
     push ax
     push bx
@@ -42,7 +41,7 @@ keyboard_irq:
     mov [cs:keys + bx], al
 .done:
     mov al, 0x20
-    out 0x20, al                ; tell the interrupt controller we're done
+    out 0x20, al                ; tell the PIC we're done (EOI)
     pop bx
     pop ax
     iret
@@ -63,7 +62,7 @@ handle_input:
 .not_right:
 
     movzx edx, word [frame_ms]
-    imul edx, MOVE_PER_MS       ; how far to go this frame
+    imul edx, MOVE_PER_MS       ; how far to move this frame
     xor ebx, ebx                ; forward
     xor ecx, ecx                ; sideways
     mov al, [keys + KEY_W]
@@ -85,8 +84,7 @@ handle_input:
     sub ecx, edx
 .not_left_strafe:
 
-    ; Walk along the view direction (cos, sin) and strafe along the
-    ; direction to its right (-sin, cos).
+    ; Forward is (cos, sin) and right is (-sin, cos)
     mov si, [player_angle]
     call sin_cos
     mov [.cos], eax
@@ -112,8 +110,8 @@ handle_input:
 .move_x: dd 0
 .move_y: dd 0
 
-; Move the player by (EAX, EDX). Each axis is checked on its own, a radius
-; ahead of where we'd end up, so you slide along walls instead of sticking.
+; Move the player by (EAX, EDX). x and y get checked separately, a radius
+; ahead of where you'd end up, so you slide along walls instead of sticking.
 try_move:
     mov esi, [player_x]
     add esi, eax
@@ -145,7 +143,8 @@ try_move:
 .done:
     ret
 
-; Esc pulses the CPU's reset line through the keyboard controller.
+; Esc reboots. Sending 0xFE to the keyboard controller pulses the CPU's
+; reset line, which is old school but it works.
 reboot:
     mov al, 0xFE
     out 0x64, al
