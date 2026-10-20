@@ -6,7 +6,7 @@ assembly, the BIOS and the VGA card.
 
 ![Tile, stone, wood and brick walls](screenshot.png)
 
-The whole image is 3 KB. Everything you see gets made at boot, like the sine
+The whole image is 3 KB in size. Everything you see gets made at boot including the sine
 table (using the x87), the 256 color palette, and the four 64x64 wall textures
 (from a 16-bit LFSR).
 
@@ -68,8 +68,7 @@ Where stuff lives in memory (physical addresses):
 | 0xA0000 | VGA framebuffer |
 
 I wrote about how it all came together on
-[my site](https://www.joelmr.com/blog/raycaster-on-bare-metal/), including the
-first version where every wall bulged out.
+[my site](https://www.joelmr.com/blog/raycaster-on-bare-metal/), including some of my troubleshooting. If you are curious, check it out.
 
 ## License
 
