@@ -1,4 +1,4 @@
-; Stage 2. We get here from the boot sector with CS = DS = ES = SS = 0.
+; We get here from the boot sector with CS = DS = ES = SS = 0.
 
 MAX_FRAME_MS equ 50             ; so a long stall doesn't teleport you
 
@@ -10,7 +10,7 @@ main:
     call keyboard_init
     call timer_init
 .frame:
-    ; ms since the last frame, so you move at the same speed no matter how
+    ; ms since the last frame, so you move at teh same speed no matter how
     ; fast the machine draws
     mov eax, [ticks]
     mov edx, eax
